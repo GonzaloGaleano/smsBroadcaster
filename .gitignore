@@ -1,0 +1,45 @@
+# ===== Build =====
+*.iml
+.gradle/
+/build/
+/captures/
+
+# ===== Local config =====
+local.properties
+
+# ===== Outputs binarios =====
+*.apk
+*.aab
+*.ap_
+/release/
+
+# ===== Native build (NDK/CMake) =====
+.externalNativeBuild/
+.cxx/
+
+# ===== Android Studio / IntelliJ =====
+# Archivos de estado personal del IDE — no compartir entre devs
+/.idea/caches/
+/.idea/libraries/
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+/.idea/deploymentTargetSelector.xml
+/.idea/appInsightsSettings.xml
+/.idea/planningMode.xml
+/.idea/runConfigurations.xml
+
+# ===== Firma de la app — NUNCA commitear =====
+*.keystore
+*.jks
+keystore.properties
+
+# ===== Secretos y configuración sensible =====
+.env
+*.env
+# google-services.json  ← descomentar si se agrega Firebase
+
+# ===== macOS =====
+.DS_Store
+**/.DS_Store

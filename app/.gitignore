@@ -1,0 +1,3 @@
+/build
+
+# app/schemas/ NO se ignora — es el historial de migraciones de Room (versionar siempre)

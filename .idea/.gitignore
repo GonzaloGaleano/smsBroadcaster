@@ -1,0 +1,10 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+
+# Estado personal del IDE
+/deploymentTargetSelector.xml
+/appInsightsSettings.xml
+/planningMode.xml
+/runConfigurations.xml
+/caches/
