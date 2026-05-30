@@ -1,6 +1,7 @@
 package com.ok2app.sms.ui.screens.dashboard
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ok2app.sms.SmsGatewayApp
@@ -26,50 +27,68 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val app = application as SmsGatewayApp
     private val repository = app.repository
 
-    private val _lastSyncTime = MutableStateFlow("—")
-    private val _isSyncing = MutableStateFlow(false)
-    private val _lastError = MutableStateFlow<String?>(null)
-
-    val uiState: StateFlow<DashboardUiState> = combine(
-        repository.configFlow,
-        repository.stats,
-        _lastSyncTime,
-        _isSyncing,
-        _lastError
-    ) { config, stats, lastSync, isSyncing, lastError ->
-        DashboardUiState(config, stats, lastSync, isSyncing, lastError)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = DashboardUiState()
-    )
+    private val _uiState = MutableStateFlow(DashboardUiState())
+    val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
+        Log.d("DashboardViewModel", "init called")
         viewModelScope.launch {
-            val config = repository.configFlow.first()
-            if (config.isConfigured) SmsForegroundService.start(getApplication())
+            // Observar configuración
+            launch {
+                repository.configFlow.collect { config ->
+                    Log.d("DashboardViewModel", "Config update: $config")
+                    _uiState.update { it.copy(config = config) }
+                    if (config.isConfigured && !config.isPaused) {
+                        SmsForegroundService.start(getApplication())
+                    }
+                }
+            }
+            // Observar estadísticas
+            launch {
+                repository.stats.collect { stats ->
+                    Log.d("DashboardViewModel", "Stats update: $stats")
+                    _uiState.update { it.copy(stats = stats) }
+                }
+            }
         }
     }
 
     fun togglePause() {
         viewModelScope.launch {
-            val paused = uiState.value.config?.isPaused ?: false
+            val paused = _uiState.value.config?.isPaused ?: false
             app.preferences.setPaused(!paused)
         }
     }
 
     fun syncNow() {
+        Log.d("DashboardViewModel", "syncNow() CLICKED")
+        if (_uiState.value.isSyncing) return
+
         viewModelScope.launch {
-            _isSyncing.value = true
-            _lastError.value = null
+            Log.d("DashboardViewModel", "syncNow() STARTING COROUTINE")
+            _uiState.update { it.copy(isSyncing = true, lastError = null) }
 
-            val result = repository.runPollCycle()
+            try {
+                // TEST DE CONEXION RAPIDO
+                val test = repository.testApiConnection()
+                Log.d("DashboardViewModel", "Connection Test: $test")
+                
+                val result = repository.runPollCycle()
+                Log.d("DashboardViewModel", "syncNow() RESULT: $result")
 
-            _isSyncing.value = false
-            _lastSyncTime.value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-
-            if (result is PollResult.Error) {
-                _lastError.value = result.message
+                _uiState.update { state ->
+                    state.copy(
+                        lastSyncTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()),
+                        lastError = if (result is PollResult.Error) result.message 
+                                   else if (test.isFailure) "Error de conexión: ${test.exceptionOrNull()?.message}"
+                                   else null
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "syncNow() EXCEPTION", e)
+                _uiState.update { it.copy(lastError = e.message) }
+            } finally {
+                _uiState.update { it.copy(isSyncing = false) }
             }
         }
     }

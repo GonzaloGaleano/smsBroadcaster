@@ -2,6 +2,7 @@ package com.ok2app.sms.data.repository
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import com.ok2app.sms.BuildConfig
 import com.ok2app.sms.data.local.db.SmsDatabase
 import com.ok2app.sms.data.local.db.SmsLogEntity
@@ -88,15 +89,33 @@ class GatewayRepository(
         }
     }
 
-    suspend fun runPollCycle(): PollResult {
+    suspend fun testApiConnection(): Result<String> {
         val config = preferences.configFlow.first()
+        if (config.baseUrl.isBlank()) return Result.failure(Exception("URL vacía"))
+        return try {
+            val api = RetrofitClient.create(config.baseUrl, config.apiToken)
+            val response = api.getPendingMessages()
+            if (response.isSuccessful) Result.success("Conexión OK: ${response.code()}")
+            else Result.failure(Exception("Error API: ${response.code()}"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun runPollCycle(): PollResult {
+        Log.d("GatewayRepository", "runPollCycle() started")
+        val config = preferences.configFlow.first()
+        Log.d("GatewayRepository", "Config: configured=${config.isConfigured}, paused=${config.isPaused}")
 
         if (!config.isConfigured) return PollResult.Skipped("No configurado")
         if (config.isPaused) return PollResult.Skipped("En pausa")
 
         return try {
+            Log.d("GatewayRepository", "Creating API client with baseUrl: ${config.baseUrl}")
             val api = RetrofitClient.create(config.baseUrl, config.apiToken)
+            Log.d("GatewayRepository", "Fetching pending messages...")
             val pendingResponse = api.getPendingMessages()
+            Log.d("GatewayRepository", "Fetch response: code=${pendingResponse.code()}, success=${pendingResponse.isSuccessful}")
 
             if (!pendingResponse.isSuccessful) {
                 return PollResult.Error("Fetch fallido: ${pendingResponse.code()}")
@@ -105,14 +124,22 @@ class GatewayRepository(
             val messages = pendingResponse.body()?.data?.map {
                 SmsMessage(it.id, it.recipient, it.content, it.priority)
             } ?: emptyList()
+            Log.d("GatewayRepository", "Found ${messages.size} pending messages")
 
             var processed = 0
 
             for (message in messages) {
-                if (!rateLimiter.canSend(config.maxMessagesPerMinute)) break
+                if (!rateLimiter.canSend(config.maxMessagesPerMinute)) {
+                    Log.w("GatewayRepository", "Rate limit reached, stopping for now")
+                    break
+                }
 
+                Log.d("GatewayRepository", "Claiming message ${message.id}")
                 val claimResponse = api.claimMessage(message.id)
-                if (!claimResponse.isSuccessful) continue
+                if (!claimResponse.isSuccessful) {
+                    Log.e("GatewayRepository", "Failed to claim message ${message.id}: ${claimResponse.code()}")
+                    continue
+                }
 
                 dao.insertOrUpdate(
                     SmsLogEntity(
@@ -124,7 +151,9 @@ class GatewayRepository(
                     )
                 )
 
+                Log.d("GatewayRepository", "Sending SMS to ${message.recipient}")
                 val smsResult = smsSender.send(message.recipient, message.content)
+                Log.d("GatewayRepository", "SMS send result: $smsResult")
 
                 val finalStatus: String
                 val errorMsg: String?
@@ -133,6 +162,7 @@ class GatewayRepository(
                     is SmsSender.SmsResult.Failure -> { finalStatus = "failed"; errorMsg = smsResult.reason }
                 }
 
+                Log.d("GatewayRepository", "Updating remote status for ${message.id} to $finalStatus")
                 api.updateStatus(message.id, StatusUpdateRequest(finalStatus, errorMsg))
 
                 dao.insertOrUpdate(
@@ -148,8 +178,10 @@ class GatewayRepository(
                 processed++
             }
 
+            Log.d("GatewayRepository", "Poll cycle completed. Processed $processed messages")
             PollResult.Success(processed)
         } catch (e: Exception) {
+            Log.e("GatewayRepository", "Error in runPollCycle", e)
             PollResult.Error(e.message ?: "Error desconocido")
         }
     }

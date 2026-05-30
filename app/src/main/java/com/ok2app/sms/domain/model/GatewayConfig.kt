@@ -8,7 +8,7 @@ data class GatewayConfig(
     val maxMessagesPerMinute: Int
 ) {
     val isConfigured: Boolean
-        get() = baseUrl.isNotBlank() && apiToken.isNotBlank() && gatewayId != null
+        get() = baseUrl.isNotBlank() && apiToken.isNotBlank() // Removido gatewayId != null para permitir primer sync
 
     val isReadyToSend: Boolean
         get() = isConfigured && !isPaused

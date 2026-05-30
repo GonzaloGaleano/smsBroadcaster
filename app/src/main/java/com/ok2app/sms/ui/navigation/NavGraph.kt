@@ -1,5 +1,6 @@
 package com.ok2app.sms.ui.navigation
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -16,10 +17,13 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun NavGraph(navController: NavHostController, startDestination: String) {
+    Log.d("NavGraph", "Rendering NavGraph with startDestination: $startDestination")
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Screen.Setup.route) {
+            Log.d("NavGraph", "Navigating to SetupScreen")
             SetupScreen(
                 onSetupComplete = {
+                    Log.d("NavGraph", "Setup complete, navigating to Dashboard")
                     navController.navigate(Screen.Dashboard.route) {
                         popUpTo(Screen.Setup.route) { inclusive = true }
                     }
@@ -27,13 +31,21 @@ fun NavGraph(navController: NavHostController, startDestination: String) {
             )
         }
         composable(Screen.Dashboard.route) {
+            Log.d("NavGraph", "Navigating to DashboardScreen")
             DashboardScreen(
-                onNavigateToHistory = { navController.navigate(Screen.History.route) }
+                onNavigateToHistory = { 
+                    Log.d("NavGraph", "Navigating to History")
+                    navController.navigate(Screen.History.route) 
+                }
             )
         }
         composable(Screen.History.route) {
+            Log.d("NavGraph", "Navigating to HistoryScreen")
             HistoryScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { 
+                    Log.d("NavGraph", "Navigating back from History")
+                    navController.popBackStack() 
+                }
             )
         }
     }

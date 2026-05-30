@@ -172,7 +172,7 @@ private fun ControlsCard(
             Button(
                 onClick = onSyncNow,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isSyncing && !isPaused
+                enabled = !isSyncing // Removido !isPaused para permitir testeo
             ) {
                 if (isSyncing) {
                     CircularProgressIndicator(
